@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { pipeline } from "node:stream/promises";
 import fs from "node:fs";
-import { error } from "node:console";
+import { YtDlpResponse } from "./types/DlpWrapper";
+import { filterFormats } from "./helperFunctions";
 
 export default class YTDLP {
   private dlpPath: string;
@@ -58,5 +58,44 @@ export default class YTDLP {
     } catch (error) {
       throw new Error(`Download failed: ${(error as Error).message}`);
     }
+  }
+
+  public getVideoOptions(url: string) {
+    const options = [
+      "--no-warnings",
+      "--no-playlist",
+      "--dump-json",
+      "--js-runtimes",
+      "node",
+      url,
+    ];
+
+    return new Promise((res, rej) => {
+      let rawData = "";
+
+      const process = spawn(this.dlpPath, options);
+
+      process.stdout.on("data", (data) => (rawData += data));
+
+      process.on("close", (code) => {
+        if (code === 0) {
+          try {
+            // 1. Parse and Type Cast
+            const parsedData = JSON.parse(rawData) as YtDlpResponse;
+
+            // 2. Pass the typed object to your function
+            fs.writeFileSync(
+              "test.json",
+              JSON.stringify(filterFormats(parsedData), null, 2)
+            );
+            res("success");
+          } catch (error) {
+            rej(`Failed to parse JSON: ${error}`);
+          }
+        } else {
+          rej(`yt-dlp exited with code ${code}`);
+        }
+      });
+    });
   }
 }
